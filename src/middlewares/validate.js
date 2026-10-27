@@ -11,9 +11,14 @@ const validate = (schema) => (req, res, next) => {
 };
 
 const validateQuery = (schema) => (req, res, next) => {
+  // Jika tidak ada query string, langsung lanjut ke controller
+  if (!req.query || Object.keys(req.query).length === 0) {
+    return next();
+  }
+
   const { error, value } = schema.validate(req.query, {
     abortEarly: false,
-    allowUnknown: false,
+    allowUnknown: true,
     stripUnknown: true,
   });
 

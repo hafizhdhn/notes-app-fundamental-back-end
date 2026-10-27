@@ -1,69 +1,92 @@
-import { nanoid } from 'nanoid';
-import notes from '../notes.js';
+import NoteRepositories from '../repositories/note-repositories.js';
 import { InvariantError, NotFoundError } from '../../../exceptions/index.js';
 import response from '../../../utils/response.js';
 
-export const createNote = (req, res, next) => {
-    const { title = 'untitled', tags, body } = req.body;
-    const id = nanoid(16);
-    const createdAt = new Date().toISOString();
-    const updatedAt = createdAt;
-
-    const newNote = { title, tags, body, id, createdAt, updatedAt };
-    notes.push(newNote);
-
-    const isSuccess = notes.filter((note) => note.id === id).length > 0;
-
-    if (!isSuccess) {
-        return next(new InvariantError('Catatan gagal ditambahkan'));
-    }
-
-    return response(res, 201, 'Catatan berhasil ditambahkan', { noteId: id });
-};
-
-export const getAllNotes = (req, res) => {
-    const { title = '' } = req.query;
-    if (title !== '') {
-        const note = notes.filter((note) => note.title === title);
-        return response(res, 200, 'success', { notes: note });
-    }
-    return response(res, 200, 'success', { notes });
-};
-
-export const getNoteById = (req, res, next) => {
-    const { id } = req.params;
-    const note = notes.find((n) => n.id === id);
+export const createNote = async (req, res, next) => {
+  try {
+    const { title = 'untitled', body = '', tags = [] } = req.validated || req.body;
+    const note = await NoteRepositories.createNote({
+      title,
+      body,
+      tags,
+    });
 
     if (!note) {
-        return next(new NotFoundError('Catatan tidak ditemukan'));
+      return next(new InvariantError('Catatan gagal ditambahkan'));
     }
 
-    return response(res, 200, 'Catatan sukses ditampilkan', { note: note });
+    return response(res, 201, 'Catatan berhasil ditambahkan', {
+      noteId: note.id,
+      ...note,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const editNoteById = (req, res, next) => {
-    const { id } = req.params;
-    const { title, tags, body } = req.body;
-    const updatedAt = new Date().toISOString();
+export const getNotes = async (req, res, next) => {
+  try {
+    const notes = await NoteRepositories.getNotes();
 
-    const index = notes.findIndex((n) => n.id === id);
-
-    if (index === -1) {
-        return next(new NotFoundError('Catatan tidak ditemukan'));
-    }
-
-    notes[index] = { ...notes[index], title, tags, body, updatedAt };
-    return response(res, 200, 'Catatan berhasil diperbarui', notes[index]);
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        notes,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const deleteNoteById = (req, res, next) => {
+export const getNoteById = async (req, res, next) => {
+  try {
     const { id } = req.params;
-    const index = notes.findIndex((n) => n.id === id);
+    const note = await NoteRepositories.getNoteById(id);
 
-    if (index === -1) {
-        return next(new NotFoundError('Catatan tidak ditemukan'));
+    if (!note) {
+      return next(new NotFoundError('Catatan tidak ditemukan'));
     }
 
-    notes.splice(index, 1);
-    return response(res, 200, 'Catatan berhasil dihapus');
+    return response(res, 200, 'Catatan sukses ditampilkan', { note });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const editNoteById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { title, body, tags } = req.validated || req.body;
+
+    const note = await NoteRepositories.editNote({
+      id,
+      title,
+      body,
+      tags,
+    });
+
+    if (!note) {
+      return next(new NotFoundError('Catatan tidak ditemukan'));
+    }
+
+    return response(res, 200, 'Catatan berhasil diperbarui', note);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteNoteById = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const deletedNote = await NoteRepositories.deleteNote(id);
+
+    if (!deletedNote) {
+      return next(new NotFoundError('Catatan tidak ditemukan'));
+    }
+
+    return response(res, 200, 'Catatan berhasil dihapus', deletedNote);
+  } catch (error) {
+    next(error);
+  }
 };

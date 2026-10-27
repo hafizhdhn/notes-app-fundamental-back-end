@@ -1,7 +1,7 @@
-import express from 'express';
+import { Router } from 'express';
 import {
   createNote,
-  getAllNotes,
+  getNotes,
   getNoteById,
   editNoteById,
   deleteNoteById,
@@ -12,10 +12,11 @@ import {
   noteQuerySchema,
 } from '../validator/schema.js';
 
-const router = express.Router();
+const router = Router();
 
+// Pasang middleware validate di POST dan PUT, serta validateQuery di GET
 router.post('/notes', validate(notePayloadSchema), createNote);
-router.get('/notes', validateQuery(noteQuerySchema), getAllNotes); // Hanya satu baris ini
+router.get('/notes', validateQuery(noteQuerySchema), getNotes);
 router.get('/notes/:id', getNoteById);
 router.put('/notes/:id', validate(notePayloadSchema), editNoteById);
 router.delete('/notes/:id', deleteNoteById);
