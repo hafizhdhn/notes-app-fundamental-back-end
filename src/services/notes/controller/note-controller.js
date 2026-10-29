@@ -5,10 +5,13 @@ import response from '../../../utils/response.js';
 export const createNote = async (req, res, next) => {
   try {
     const { title = 'untitled', body = '', tags = [] } = req.validated || req.body;
+    const owner = req.user ? req.user.id : null;
+
     const note = await NoteRepositories.createNote({
       title,
       body,
       tags,
+      owner,
     });
 
     if (!note) {
@@ -17,6 +20,7 @@ export const createNote = async (req, res, next) => {
 
     return response(res, 201, 'Catatan berhasil ditambahkan', {
       noteId: note.id,
+      id: note.id,
       ...note,
     });
   } catch (error) {
@@ -26,14 +30,19 @@ export const createNote = async (req, res, next) => {
 
 export const getNotes = async (req, res, next) => {
   try {
-    const notes = await NoteRepositories.getNotes();
+    // Di folder notes umum, getNotes() mengambil semua catatan. 
+    // Di folder authorizations, req.user membawa kredensial owner.
+    const owner = req.headers['authorization'] && req.user ? req.user.id : null;
+    const { title } = req.query;
+    const notes = await NoteRepositories.getNotes(owner, title);
 
-    return res.status(200).json({
-      status: 'success',
-      data: {
-        notes,
-      },
-    });
+    const formattedNotes = notes.map((n) => ({
+      id: n.id,
+      title: n.title,
+      tags: n.tags,
+    }));
+
+    return response(res, 200, 'success', { notes: formattedNotes });
   } catch (error) {
     next(error);
   }
@@ -42,12 +51,13 @@ export const getNotes = async (req, res, next) => {
 export const getNoteById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const note = await NoteRepositories.getNoteById(id);
+    const owner = req.user ? req.user.id : null;
 
-    if (!note) {
-      return next(new NotFoundError('Catatan tidak ditemukan'));
+    if (owner) {
+      await NoteRepositories.verifyNoteOwner(id, owner);
     }
 
+    const note = await NoteRepositories.getNoteById(id);
     return response(res, 200, 'Catatan sukses ditampilkan', { note });
   } catch (error) {
     next(error);
@@ -57,19 +67,14 @@ export const getNoteById = async (req, res, next) => {
 export const editNoteById = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const owner = req.user ? req.user.id : null;
     const { title, body, tags } = req.validated || req.body;
 
-    const note = await NoteRepositories.editNote({
-      id,
-      title,
-      body,
-      tags,
-    });
-
-    if (!note) {
-      return next(new NotFoundError('Catatan tidak ditemukan'));
+    if (owner) {
+      await NoteRepositories.verifyNoteOwner(id, owner);
     }
 
+    const note = await NoteRepositories.editNote({ id, title, body, tags });
     return response(res, 200, 'Catatan berhasil diperbarui', note);
   } catch (error) {
     next(error);
@@ -79,13 +84,14 @@ export const editNoteById = async (req, res, next) => {
 export const deleteNoteById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const deletedNote = await NoteRepositories.deleteNote(id);
+    const owner = req.user ? req.user.id : null;
 
-    if (!deletedNote) {
-      return next(new NotFoundError('Catatan tidak ditemukan'));
+    if (owner) {
+      await NoteRepositories.verifyNoteOwner(id, owner);
     }
 
-    return response(res, 200, 'Catatan berhasil dihapus', deletedNote);
+    await NoteRepositories.deleteNote(id);
+    return response(res, 200, 'Catatan berhasil dihapus');
   } catch (error) {
     next(error);
   }

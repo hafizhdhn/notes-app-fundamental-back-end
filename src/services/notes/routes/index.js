@@ -11,14 +11,14 @@ import {
   notePayloadSchema,
   noteQuerySchema,
 } from '../validator/schema.js';
+import authenticateToken from '../../../middlewares/authenticateToken.js';
 
 const router = Router();
 
-// Pasang middleware validate di POST dan PUT, serta validateQuery di GET
-router.post('/notes', validate(notePayloadSchema), createNote);
-router.get('/notes', validateQuery(noteQuerySchema), getNotes);
-router.get('/notes/:id', getNoteById);
-router.put('/notes/:id', validate(notePayloadSchema), editNoteById);
-router.delete('/notes/:id', deleteNoteById);
+router.post('/notes', authenticateToken, validate(notePayloadSchema), createNote);
+router.get('/notes', authenticateToken, validateQuery(noteQuerySchema), getNotes);
+router.get('/notes/:id', authenticateToken, getNoteById);
+router.put('/notes/:id', authenticateToken, validate(notePayloadSchema), editNoteById);
+router.delete('/notes/:id', authenticateToken, deleteNoteById);
 
 export default router;
