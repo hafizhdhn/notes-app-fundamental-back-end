@@ -44,3 +44,14 @@ export const getUserByIdHandler = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getUsersByUsername = async (req, res, next) => {
+  try {
+    const { username = '' } = req.query;
+    const users = await UserRepositories.getUsersByUsername(username);
+
+    return response(res, 200, 'User berhasil ditampilkan', { users });
+  } catch (error) {
+    next(error);
+  }
+};

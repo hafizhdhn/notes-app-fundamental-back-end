@@ -1,10 +1,12 @@
 import { Pool } from 'pg';
 import { nanoid } from 'nanoid';
 import { AuthorizationError, NotFoundError } from '../../../exceptions/index.js';
+import collaborationRepositories from '../../collaborations/repositories/collaboration-repositories.js';
 
 class NoteRepositories {
   constructor() {
     this._pool = new Pool();
+     this.collaborationRepositories = collaborationRepositories;
   }
 
   async createNote({ title, body, tags, owner = null }) {
@@ -31,61 +33,27 @@ class NoteRepositories {
   }
 
   async getNotes(owner = null, titleQuery = null) {
-    let text = 'SELECT id, title, body, tags, created_at, updated_at, owner FROM notes';
-    const values = [];
-    const conditions = [];
-
-    // Jika di folder Authorizations (bukan folder Notes umum), filter berdasarkan owner
-    if (owner) {
-      values.push(owner);
-      conditions.push(`owner = $${values.length}`);
-    }
-
-    if (titleQuery) {
-      const queryTitle = Array.isArray(titleQuery) ? titleQuery[0] : titleQuery;
-      values.push(`%${queryTitle}%`);
-      conditions.push(`title ILIKE $${values.length}`);
-    }
-
-    if (conditions.length > 0) {
-      text += ` WHERE ${conditions.join(' AND ')}`;
-    }
-
-    const query = { text, values };
-    const result = await this._pool.query(query);
-
-    return result.rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      body: row.body,
-      tags: row.tags,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      owner: row.owner,
-    }));
+    const query = {
+text: `SELECT notes.* FROM notes
+LEFT JOIN collaborations ON collaborations.note_id = notes.id
+WHERE notes.owner = $1 OR collaborations.user_id = $1
+GROUP BY notes.id`,
+values: [owner],
+};
+const result = await this.pool.query(query);
+return result.rows;
   }
 
   async getNoteById(id) {
-    const query = {
-      text: 'SELECT id, title, body, tags, created_at, updated_at, owner FROM notes WHERE id = $1',
-      values: [id],
-    };
-
-    const result = await this._pool.query(query);
-    if (!result.rows.length) {
-      throw new NotFoundError('Catatan tidak ditemukan');
-    }
-
-    const row = result.rows[0];
-    return {
-      id: row.id,
-      title: row.title,
-      body: row.body,
-      tags: row.tags,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      owner: row.owner,
-    };
+   const query = {
+text:`SELECT notes.*, users.username
+FROM notes
+LEFT JOIN users ON users.id = notes.owner
+WHERE notes.id = $1`,
+values: [id],
+};
+const result = await this.pool.query(query);
+return result.rows[0];
   }
 
   async editNote({ id, title, body, tags }) {
@@ -143,6 +111,28 @@ class NoteRepositories {
       throw new AuthorizationError('Anda tidak berhak mengakses resource ini');
     }
   }
+
+  async verifyNoteAccess(noteId, userId) {
+  const ownerResult = await this.verifyNoteOwner(noteId, userId);
+ 
+  if (ownerResult) {
+    return ownerResult;
+  }
+ 
+  const result =  await this.collaborationRepositories.verifyCollaborator(noteId, userId);
+ 
+  return result;
+}
+
+async getUsersByUsername(username) {
+  const query = {
+    text: 'SELECT id, username, fullname FROM users WHERE username LIKE $1',
+    values: [`%${username}%`],
+  };
+
+  const result = await this._pool.query(query);
+  return result.rows;
+}
 }
 
 export default new NoteRepositories();

@@ -54,7 +54,7 @@ export const getNoteById = async (req, res, next) => {
     const owner = req.user ? req.user.id : null;
 
     if (owner) {
-      await NoteRepositories.verifyNoteOwner(id, owner);
+      await NoteRepositories.verifyNoteAccess(id, owner);
     }
 
     const note = await NoteRepositories.getNoteById(id);
@@ -71,7 +71,7 @@ export const editNoteById = async (req, res, next) => {
     const { title, body, tags } = req.validated || req.body;
 
     if (owner) {
-      await NoteRepositories.verifyNoteOwner(id, owner);
+      await NoteRepositories.verifyNoteAccess(id, owner);
     }
 
     const note = await NoteRepositories.editNote({ id, title, body, tags });

@@ -2,6 +2,7 @@ import UserRepositories from '../repositories/user-repositories.js';
 import { InvariantError, NotFoundError } from '../../../exceptions/index.js';
 import response from '../../../utils/response.js';
 
+
 export const postUserHandler = async (req, res, next) => {
   try {
     const { username, password, fullname } = req.body;
@@ -25,6 +26,7 @@ export const getUserByIdHandler = async (req, res, next) => {
   try {
     const { id } = req.params;
     const user = await UserRepositories.getUserById(id);
+    
 
     if (!user) {
       return next(new NotFoundError('User tidak ditemukan'));
@@ -40,4 +42,13 @@ export const getUserByIdHandler = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+export const getUsersByUsername = async (req, res, next) => {
+const username = req.query.username;
+const user = await UserRepositories.getUsersByUsername(username);
+if (!user) {
+return next(new NotFoundError('User tidak ditemukan'));
+}
+return response(res, 200, 'User berhasil ditampilkan', { users: user });
 };
