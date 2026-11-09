@@ -7,6 +7,6 @@ const router = Router();
 
 router.post('/', validate(userPayloadSchema), postUserHandler);
 router.get('/:id', getUserByIdHandler);
-router.get('/users', getUsersByUsername);
+router.get('/', getUsersByUsername);
 
 export default router;

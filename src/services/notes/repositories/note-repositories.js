@@ -40,7 +40,7 @@ WHERE notes.owner = $1 OR collaborations.user_id = $1
 GROUP BY notes.id`,
 values: [owner],
 };
-const result = await this.pool.query(query);
+const result = await this._pool.query(query);
 return result.rows;
   }
 
@@ -52,7 +52,7 @@ LEFT JOIN users ON users.id = notes.owner
 WHERE notes.id = $1`,
 values: [id],
 };
-const result = await this.pool.query(query);
+const result = await this._pool.query(query);
 return result.rows[0];
   }
 
