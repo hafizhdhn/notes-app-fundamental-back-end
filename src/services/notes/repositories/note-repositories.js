@@ -2,11 +2,13 @@ import { Pool } from 'pg';
 import { nanoid } from 'nanoid';
 import { AuthorizationError, NotFoundError } from '../../../exceptions/index.js';
 import collaborationRepositories from '../../collaborations/repositories/collaboration-repositories.js';
+import CacheService from '../../../cache/redis-service.js';
 
 class NoteRepositories {
   constructor() {
     this._pool = new Pool();
-     this.collaborationRepositories = collaborationRepositories;
+    this.collaborationRepositories = collaborationRepositories;
+    this.cacheService = new CacheService();
   }
 
   async createNote({ title, body, tags, owner = null }) {
@@ -21,6 +23,9 @@ class NoteRepositories {
 
     const result = await this._pool.query(query);
     const row = result.rows[0];
+
+    await this.cacheService.delete(`notes:${owner}`);
+
     return {
       id: row.id,
       title: row.title,
@@ -33,27 +38,39 @@ class NoteRepositories {
   }
 
   async getNotes(owner = null, titleQuery = null) {
-    const query = {
-text: `SELECT notes.* FROM notes
-LEFT JOIN collaborations ON collaborations.note_id = notes.id
-WHERE notes.owner = $1 OR collaborations.user_id = $1
-GROUP BY notes.id`,
-values: [owner],
-};
-const result = await this._pool.query(query);
-return result.rows;
+    const cacheKey = `notes:${owner}`;
+
+    try {
+      const notes = await this.cacheService.get(cacheKey);
+      return JSON.parse(notes);
+    } catch (error) {
+      // Cache miss, get from database
+      const query = {
+        text: `SELECT notes.* FROM notes
+        LEFT JOIN collaborations ON collaborations.note_id = notes.id
+        WHERE notes.owner = $1 OR collaborations.user_id = $1
+        GROUP BY notes.id`,
+        values: [owner],
+      };
+
+      const result = await this._pool.query(query);
+
+      await this.cacheService.set(cacheKey, JSON.stringify(result.rows));
+
+      return result.rows;
+    }
   }
 
   async getNoteById(id) {
-   const query = {
-text:`SELECT notes.*, users.username
+    const query = {
+      text: `SELECT notes.*, users.username
 FROM notes
 LEFT JOIN users ON users.id = notes.owner
 WHERE notes.id = $1`,
-values: [id],
-};
-const result = await this._pool.query(query);
-return result.rows[0];
+      values: [id],
+    };
+    const result = await this._pool.query(query);
+    return result.rows[0];
   }
 
   async editNote({ id, title, body, tags }) {
@@ -69,6 +86,9 @@ return result.rows[0];
     }
 
     const row = result.rows[0];
+
+    await this.cacheService.delete(`notes:${row.owner}`);
+
     return {
       id: row.id,
       title: row.title,
@@ -82,7 +102,7 @@ return result.rows[0];
 
   async deleteNote(id) {
     const query = {
-      text: 'DELETE FROM notes WHERE id = $1 RETURNING id',
+      text: 'DELETE FROM notes WHERE id = $1 RETURNING id, owner',
       values: [id],
     };
 
@@ -91,7 +111,11 @@ return result.rows[0];
       throw new NotFoundError('Catatan tidak ditemukan');
     }
 
-    return result.rows[0].id;
+    const row = result.rows[0];
+
+    await this.cacheService.delete(`notes:${row.owner}`);
+
+    return row.id;
   }
 
   async verifyNoteOwner(id, owner) {
@@ -106,33 +130,32 @@ return result.rows[0];
     }
 
     const note = result.rows[0];
-    // Jika catatan memiliki owner dan berbeda dengan user yang sedang akses, lempar AuthorizationError (403)
     if (note.owner && owner && note.owner !== owner) {
       throw new AuthorizationError('Anda tidak berhak mengakses resource ini');
     }
   }
 
   async verifyNoteAccess(noteId, userId) {
-  const ownerResult = await this.verifyNoteOwner(noteId, userId);
+    const ownerResult = await this.verifyNoteOwner(noteId, userId);
  
-  if (ownerResult) {
-    return ownerResult;
+    if (ownerResult) {
+      return ownerResult;
+    }
+ 
+    const result = await this.collaborationRepositories.verifyCollaborator(noteId, userId);
+ 
+    return result;
   }
- 
-  const result =  await this.collaborationRepositories.verifyCollaborator(noteId, userId);
- 
-  return result;
-}
 
-async getUsersByUsername(username) {
-  const query = {
-    text: 'SELECT id, username, fullname FROM users WHERE username LIKE $1',
-    values: [`%${username}%`],
-  };
+  async getUsersByUsername(username) {
+    const query = {
+      text: 'SELECT id, username, fullname FROM users WHERE username LIKE $1',
+      values: [`%${username}%`],
+    };
 
-  const result = await this._pool.query(query);
-  return result.rows;
-}
+    const result = await this._pool.query(query);
+    return result.rows;
+  }
 }
 
 export default new NoteRepositories();
